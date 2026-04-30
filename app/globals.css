@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #ffffff;
+  --accent: #f07517;
+  --text: #4d4d4d;
+  --ink: #000000;
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Markdown rendering styles */
+.markdown {
+  color: #4d4d4d;
+  line-height: 1.6;
+}
+.markdown h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #000;
+  margin: 1.25rem 0 0.75rem;
+}
+.markdown h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #000;
+  margin: 1.1rem 0 0.6rem;
+}
+.markdown h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #000;
+  margin: 1rem 0 0.5rem;
+}
+.markdown p {
+  margin: 0.5rem 0;
+}
+.markdown strong {
+  color: #000;
+  font-weight: 600;
+}
+.markdown ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+.markdown ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+.markdown li {
+  margin: 0.25rem 0;
+}
+.markdown code {
+  background: #f3f4f6;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  font-size: 0.9em;
+  color: #000;
+}
+.markdown pre {
+  background: #0f0f0f;
+  color: #e5e5e5;
+  padding: 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+}
+.markdown pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+.markdown blockquote {
+  border-left: 3px solid #f07517;
+  padding-left: 1rem;
+  color: #555;
+  margin: 0.75rem 0;
+  font-style: italic;
+}
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid #e5e7eb;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.markdown th {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #000;
+}
+.markdown a {
+  color: #f07517;
+  text-decoration: underline;
+}
+.markdown hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 1rem 0;
+}
