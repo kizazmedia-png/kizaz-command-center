@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BigQuery } from "@google-cloud/bigquery";
 import { SiteId } from "@/lib/sites";
+import { getBigQueryClient } from "@/lib/bigquery";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,12 +9,6 @@ export const dynamic = "force-dynamic";
 const PROJECT_ID = process.env.BIGQUERY_PROJECT_ID || "";
 const DATASET_ID = process.env.BIGQUERY_DATASET_ID || "";
 const SNAPSHOT_TABLE = "snapshots";
-
-function getClient(): BigQuery {
-  // Uses Application Default Credentials (GCE/Cloud Run/local gcloud)
-  // or GOOGLE_APPLICATION_CREDENTIALS env if set.
-  return new BigQuery({ projectId: PROJECT_ID });
-}
 
 async function ensureTable(bq: BigQuery) {
   const dataset = bq.dataset(DATASET_ID);
@@ -46,7 +41,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action } = body as { action: "store" | "list" };
 
-    const bq = getClient();
+    const bq = getBigQueryClient();
     await ensureTable(bq);
 
     if (action === "store") {
