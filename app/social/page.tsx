@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
 import ToolCard, { ToolGrid } from "@/components/ToolCard";
 
@@ -10,6 +11,28 @@ export default function SocialPage() {
         title="Email & Social"
         subtitle="Newsletters, captions, calendars, and hooks."
       />
+
+      <Link
+        href="/social/post-builder"
+        className="block mb-6 p-5 bg-accent/5 border border-accent/30 rounded-xl hover:bg-accent/10 transition"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-semibold text-accent uppercase tracking-wide">
+              New
+            </div>
+            <h2 className="text-lg font-semibold text-ink mt-1">
+              Social Post Builder
+            </h2>
+            <p className="text-sm text-text mt-1">
+              Photograph a fact from a book or calendar → Claude drafts caption,
+              description, and hashtags → upload your image → ready for Canva.
+            </p>
+          </div>
+          <span className="text-accent text-2xl">→</span>
+        </div>
+      </Link>
+
       <ToolGrid>
         <ToolCard
           tool="newsletter-generator"
