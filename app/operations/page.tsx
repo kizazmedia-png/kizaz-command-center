@@ -49,6 +49,16 @@ export default function OperationsPage() {
               required: true,
             },
           ]}
+          wordPressLoaders={[
+            {
+              field: "pages",
+              label: "Load Posts from WordPress",
+              format: (p) => {
+                const date = (p.date || "").slice(0, 10);
+                return `${p.title} — ${date}`;
+              },
+            },
+          ]}
           submitLabel="Audit"
         />
 

@@ -81,6 +81,7 @@ export default function ContentPage() {
               placeholder: "1500",
             },
           ]}
+          publishToWordPress={{ titleField: "topic" }}
           submitLabel="Draft Article"
         />
 

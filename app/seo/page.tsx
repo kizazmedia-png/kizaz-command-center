@@ -56,6 +56,13 @@ export default function SeoPage() {
               required: true,
             },
           ]}
+          wordPressLoaders={[
+            {
+              field: "pages",
+              label: "Load Pages from WordPress",
+              format: (p) => `${p.link} — ${p.title}`,
+            },
+          ]}
           submitLabel="Suggest Links"
         />
 
@@ -97,6 +104,15 @@ export default function SeoPage() {
               placeholder:
                 "https://site.com/dog-cafes — Best Dog Cafes — dog cafes\nhttps://site.com/dog-friendly-cafes — Top Dog-Friendly Cafes — dog friendly cafes",
               required: true,
+              helper:
+                "Append a primary keyword after the title where you can — the checker uses it to spot overlap.",
+            },
+          ]}
+          wordPressLoaders={[
+            {
+              field: "pages",
+              label: "Load Pages from WordPress",
+              format: (p) => `${p.link} — ${p.title} — `,
             },
           ]}
           submitLabel="Check"

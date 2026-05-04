@@ -18,6 +18,32 @@ export interface FieldDef {
   helper?: string;
 }
 
+export interface WordPressPost {
+  id: number;
+  title: string;
+  slug: string;
+  status: string;
+  date: string;
+  excerpt: string;
+  link: string;
+}
+
+export interface WordPressLoader {
+  /** Which textarea field name to populate. */
+  field: string;
+  /** Button label. */
+  label: string;
+  /** Convert a post into the text representation appended (one per line). */
+  format: (post: WordPressPost) => string;
+}
+
+export interface PublishToWordPress {
+  /** Which input field to use as the post title. */
+  titleField: string;
+  /** Optional override label for the button. */
+  label?: string;
+}
+
 interface ToolCardProps {
   tool: ToolId;
   title: string;
@@ -26,6 +52,10 @@ interface ToolCardProps {
   submitLabel?: string;
   /** If true, hide the card entirely (used for site-specific tools). */
   hidden?: boolean;
+  /** Buttons that load post data from the active site's WordPress and populate a textarea. */
+  wordPressLoaders?: WordPressLoader[];
+  /** Show a "Send to WordPress as Draft" button after a successful generation. */
+  publishToWordPress?: PublishToWordPress;
 }
 
 export default function ToolCard({
@@ -35,6 +65,8 @@ export default function ToolCard({
   fields,
   submitLabel = "Generate",
   hidden,
+  wordPressLoaders,
+  publishToWordPress,
 }: ToolCardProps) {
   const { siteId } = useSite();
   const [values, setValues] = useState<Record<string, any>>({});
@@ -42,6 +74,13 @@ export default function ToolCard({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
   const [copied, setCopied] = useState(false);
+  const [loadingLoader, setLoadingLoader] = useState<string>("");
+  const [publishing, setPublishing] = useState(false);
+  const [publishMsg, setPublishMsg] = useState<{
+    kind: "ok" | "err";
+    text: string;
+    url?: string;
+  } | null>(null);
 
   if (hidden) return null;
 
@@ -90,6 +129,78 @@ export default function ToolCard({
     setOutput("");
     setError("");
     setCopied(false);
+    setPublishMsg(null);
+  };
+
+  const runLoader = async (loader: WordPressLoader) => {
+    setLoadingLoader(loader.field);
+    setError("");
+    try {
+      const res = await fetch("/api/wordpress/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ site: siteId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.error || `WordPress request failed (${res.status})`);
+        return;
+      }
+      const posts: WordPressPost[] = Array.isArray(data?.posts)
+        ? data.posts
+        : [];
+      const text = posts.map(loader.format).filter(Boolean).join("\n");
+      const existing = (values[loader.field] || "").trim();
+      const next = existing ? `${existing}\n${text}` : text;
+      update(loader.field, next);
+    } catch (e: any) {
+      setError(e?.message || "Network error loading WordPress posts");
+    } finally {
+      setLoadingLoader("");
+    }
+  };
+
+  const sendToWordPress = async () => {
+    if (!publishToWordPress || !output) return;
+    const titleSrc = values[publishToWordPress.titleField];
+    const title =
+      typeof titleSrc === "string" && titleSrc.trim()
+        ? titleSrc.trim()
+        : "Untitled draft";
+    setPublishing(true);
+    setPublishMsg(null);
+    try {
+      const res = await fetch("/api/wordpress/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site: siteId,
+          title,
+          content: output,
+          status: "draft",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPublishMsg({
+          kind: "err",
+          text: data?.error || `WordPress request failed (${res.status})`,
+        });
+      } else {
+        setPublishMsg({
+          kind: "ok",
+          text: "Draft created in WordPress.",
+          url: data?.editUrl || data?.url || "",
+        });
+      }
+    } catch (e: any) {
+      setPublishMsg({
+        kind: "err",
+        text: e?.message || "Network error sending to WordPress",
+      });
+    } finally {
+      setPublishing(false);
+    }
   };
 
   const copy = async () => {
@@ -111,6 +222,26 @@ export default function ToolCard({
           <p className="text-sm text-text mt-1">{description}</p>
         )}
       </header>
+
+      {wordPressLoaders && wordPressLoaders.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {wordPressLoaders.map((loader) => {
+            const isLoading = loadingLoader === loader.field;
+            return (
+              <button
+                key={loader.field + loader.label}
+                type="button"
+                onClick={() => runLoader(loader)}
+                disabled={isLoading}
+                className="text-xs px-3 py-1.5 rounded-md border border-gray-200 hover:bg-gray-50 text-text disabled:opacity-60 flex items-center gap-2"
+              >
+                {isLoading && <Spinner small dark />}
+                {isLoading ? "Loading..." : loader.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="space-y-4">
         {fields.map((f) => (
@@ -145,6 +276,18 @@ export default function ToolCard({
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-ink">Output</h3>
             <div className="flex items-center gap-2">
+              {publishToWordPress && (
+                <button
+                  onClick={sendToWordPress}
+                  disabled={publishing}
+                  className="text-xs px-3 py-1.5 rounded-md bg-accent hover:bg-accent/90 disabled:opacity-60 text-white flex items-center gap-2"
+                >
+                  {publishing && <Spinner small />}
+                  {publishing
+                    ? "Sending..."
+                    : publishToWordPress.label || "Send to WordPress as Draft"}
+                </button>
+              )}
               <button
                 onClick={copy}
                 className="text-xs px-3 py-1.5 rounded-md border border-gray-200 hover:bg-gray-50 text-text"
@@ -159,6 +302,31 @@ export default function ToolCard({
               </button>
             </div>
           </div>
+          {publishMsg && (
+            <div
+              className={[
+                "mb-3 p-3 rounded-md border text-sm",
+                publishMsg.kind === "ok"
+                  ? "bg-green-50 border-green-200 text-green-800"
+                  : "bg-red-50 border-red-200 text-red-700",
+              ].join(" ")}
+            >
+              {publishMsg.text}
+              {publishMsg.url && (
+                <>
+                  {" "}
+                  <a
+                    href={publishMsg.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                  >
+                    Open in WordPress →
+                  </a>
+                </>
+              )}
+            </div>
+          )}
           <MarkdownView content={output} />
         </div>
       )}
@@ -293,9 +461,15 @@ function Field({
   );
 }
 
-function Spinner() {
+function Spinner({ small, dark }: { small?: boolean; dark?: boolean }) {
+  const size = small ? "w-3 h-3" : "w-4 h-4";
+  const color = dark
+    ? "border-gray-300 border-t-gray-700"
+    : "border-white/40 border-t-white";
   return (
-    <span className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+    <span
+      className={`inline-block ${size} border-2 ${color} rounded-full animate-spin`}
+    />
   );
 }
 
