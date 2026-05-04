@@ -22,14 +22,14 @@ export async function POST(req: NextRequest) {
     if (!cfg) {
       return NextResponse.json({ error: "Invalid site" }, { status: 400 });
     }
-    if (!cfg.ga4PropertyId) {
+    if (!cfg.ga4Property) {
       return NextResponse.json(
-        { error: "GA4 property ID not configured for this site." },
+        { error: "GA4 property not configured for this site." },
         { status: 400 }
       );
     }
 
-    const url = `https://analyticsdata.googleapis.com/v1beta/properties/${cfg.ga4PropertyId}:runReport`;
+    const url = `https://analyticsdata.googleapis.com/v1beta/${cfg.ga4Property}:runReport`;
     const requestBody = {
       dateRanges: [{ startDate: "28daysAgo", endDate: "yesterday" }],
       dimensions: [{ name: "pagePath" }, { name: "pageTitle" }],

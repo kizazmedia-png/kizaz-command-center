@@ -44,3 +44,7 @@ next-env.d.ts
 # google credentials
 google-credentials.json
 service-account*.json
+
+# local data + user uploads
+/data
+/public/uploads

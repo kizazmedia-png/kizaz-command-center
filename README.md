@@ -23,11 +23,13 @@ NEXTAUTH_URL=http://localhost:3000
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
-# Optional, per-site Search Console + GA4 wiring (overrides defaults in lib/dataConfig.ts)
-GSC_DFD_SITE_URL=sc-domain:dogfriendlydestos.com
-GSC_KIZAZ_SITE_URL=sc-domain:kizazmedia.com
-GA4_DFD_PROPERTY_ID=
-GA4_KIZAZ_PROPERTY_ID=
+# Per-site Search Console + GA4 wiring (read by lib/dataConfig.ts)
+# GSC_PROPERTY_* accepts a URL-prefix property (https://example.com) or a domain property (sc-domain:example.com)
+# GA4_PROPERTY_* must be the full property path, e.g. properties/123456789
+GSC_PROPERTY_DFD=https://dogfriendlydestos.com
+GSC_PROPERTY_KIZAZ=sc-domain:kizaz.com
+GA4_PROPERTY_DFD=properties/YOUR_DFD_GA4_ID
+GA4_PROPERTY_KIZAZ=properties/YOUR_KIZAZ_GA4_ID
 ```
 
 For BigQuery the route uses Application Default Credentials. Either run `gcloud auth application-default login` locally or set `GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json`. On Vercel, attach a service account credential and expose `GOOGLE_APPLICATION_CREDENTIALS_JSON` if you adapt the BigQuery route accordingly.

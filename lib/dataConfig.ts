@@ -2,17 +2,16 @@ import { SiteId } from "./sites";
 
 export interface DataSiteConfig {
   gscSiteUrl: string; // sc-domain:example.com or https://example.com/
-  ga4PropertyId: string; // numeric property id
+  ga4Property: string; // full property path, e.g. "properties/123456789"
 }
 
-// Placeholders — fill in real GSC site URLs and GA4 property IDs once configured.
 export const DATA_CONFIG: Record<SiteId, DataSiteConfig> = {
   dfd: {
-    gscSiteUrl: process.env.GSC_DFD_SITE_URL || "sc-domain:dogfriendlydestos.com",
-    ga4PropertyId: process.env.GA4_DFD_PROPERTY_ID || "",
+    gscSiteUrl: process.env.GSC_PROPERTY_DFD || "",
+    ga4Property: process.env.GA4_PROPERTY_DFD || "",
   },
   kizaz: {
-    gscSiteUrl: process.env.GSC_KIZAZ_SITE_URL || "sc-domain:kizazmedia.com",
-    ga4PropertyId: process.env.GA4_KIZAZ_PROPERTY_ID || "",
+    gscSiteUrl: process.env.GSC_PROPERTY_KIZAZ || "",
+    ga4Property: process.env.GA4_PROPERTY_KIZAZ || "",
   },
 };
