@@ -7,6 +7,10 @@ import { SiteId } from "@/lib/sites";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function isValidDate(s: string | undefined): s is string {
+  return !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = (await getServerSession(authOptions)) as any;
@@ -17,7 +21,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { site } = (await req.json()) as { site: SiteId };
+    const { site, startDate, endDate } = (await req.json()) as {
+      site: SiteId;
+      startDate?: string;
+      endDate?: string;
+    };
     const cfg = DATA_CONFIG[site];
     if (!cfg) {
       return NextResponse.json({ error: "Invalid site" }, { status: 400 });
@@ -29,9 +37,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const today = new Date().toISOString().slice(0, 10);
+    const start = isValidDate(startDate) ? startDate! : today;
+    const end = isValidDate(endDate) ? endDate! : today;
+
     const url = `https://analyticsdata.googleapis.com/v1beta/${cfg.ga4Property}:runReport`;
     const requestBody = {
-      dateRanges: [{ startDate: "28daysAgo", endDate: "yesterday" }],
+      dateRanges: [{ startDate: start, endDate: end }],
       dimensions: [{ name: "pagePath" }, { name: "pageTitle" }],
       metrics: [
         { name: "screenPageViews" },

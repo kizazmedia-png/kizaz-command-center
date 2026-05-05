@@ -73,10 +73,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "list") {
-      const { site, source, limit } = body as {
+      const { site, source, limit, startDate, endDate } = body as {
         site?: SiteId;
         source?: string;
         limit?: number;
+        startDate?: string;
+        endDate?: string;
       };
       const where: string[] = [];
       const params: Record<string, any> = {};
@@ -87,6 +89,15 @@ export async function POST(req: NextRequest) {
       if (source) {
         where.push("source = @source");
         params.source = source;
+      }
+      const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+      if (startDate && dateRe.test(startDate)) {
+        where.push("captured_at >= TIMESTAMP(@startDate)");
+        params.startDate = `${startDate} 00:00:00`;
+      }
+      if (endDate && dateRe.test(endDate)) {
+        where.push("captured_at <= TIMESTAMP(@endDate)");
+        params.endDate = `${endDate} 23:59:59`;
       }
       const sql = `SELECT captured_at, site, source, label, payload
                    FROM \`${PROJECT_ID}.${DATASET_ID}.${SNAPSHOT_TABLE}\`

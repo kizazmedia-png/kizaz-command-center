@@ -1,9 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession, signIn } from "next-auth/react";
 import PageHeader from "@/components/PageHeader";
 import { useSite } from "@/components/SiteContext";
+
+type TimeFilter = "today" | "7d" | "30d" | "custom";
+
+function computeRange(
+  filter: TimeFilter,
+  customStart?: string,
+  customEnd?: string
+): { startDate: string; endDate: string } | null {
+  const today = new Date().toISOString().slice(0, 10);
+  if (filter === "today") return { startDate: today, endDate: today };
+  if (filter === "7d") {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 6);
+    return { startDate: d.toISOString().slice(0, 10), endDate: today };
+  }
+  if (filter === "30d") {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 29);
+    return { startDate: d.toISOString().slice(0, 10), endDate: today };
+  }
+  if (customStart && customEnd) {
+    return { startDate: customStart, endDate: customEnd };
+  }
+  return null;
+}
 
 interface GscRow {
   page: string;
@@ -37,6 +62,11 @@ export default function DataPage() {
   const { data: session, status } = useSession();
   const { siteId, site } = useSite();
 
+  const [filter, setFilter] = useState<TimeFilter>("today");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+  const range = computeRange(filter, customStart, customEnd);
+
   const [gscMode, setGscMode] = useState<"topPages" | "declining">("topPages");
   const [gscRows, setGscRows] = useState<GscRow[]>([]);
   const [gscLoading, setGscLoading] = useState(false);
@@ -51,7 +81,15 @@ export default function DataPage() {
   const [bqError, setBqError] = useState("");
   const [bqStatus, setBqStatus] = useState("");
 
+  const gscLoadedRef = useRef(false);
+  const ga4LoadedRef = useRef(false);
+  const bqLoadedRef = useRef(false);
+
   const fetchGsc = async () => {
+    if (!range) {
+      setGscError("Pick a start and end date for the custom range.");
+      return;
+    }
     setGscLoading(true);
     setGscError("");
     setGscRows([]);
@@ -59,11 +97,19 @@ export default function DataPage() {
       const res = await fetch("/api/gsc", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ site: siteId, mode: gscMode }),
+        body: JSON.stringify({
+          site: siteId,
+          mode: gscMode,
+          startDate: range.startDate,
+          endDate: range.endDate,
+        }),
       });
       const data = await res.json();
       if (!res.ok) setGscError(data.error || "GSC fetch failed");
-      else setGscRows(data.rows || []);
+      else {
+        setGscRows(data.rows || []);
+        gscLoadedRef.current = true;
+      }
     } catch (e: any) {
       setGscError(e?.message || "Network error");
     } finally {
@@ -72,6 +118,10 @@ export default function DataPage() {
   };
 
   const fetchGa4 = async () => {
+    if (!range) {
+      setGa4Error("Pick a start and end date for the custom range.");
+      return;
+    }
     setGa4Loading(true);
     setGa4Error("");
     setGa4Rows([]);
@@ -79,11 +129,18 @@ export default function DataPage() {
       const res = await fetch("/api/ga4", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ site: siteId }),
+        body: JSON.stringify({
+          site: siteId,
+          startDate: range.startDate,
+          endDate: range.endDate,
+        }),
       });
       const data = await res.json();
       if (!res.ok) setGa4Error(data.error || "GA4 fetch failed");
-      else setGa4Rows(data.rows || []);
+      else {
+        setGa4Rows(data.rows || []);
+        ga4LoadedRef.current = true;
+      }
     } catch (e: any) {
       setGa4Error(e?.message || "Network error");
     } finally {
@@ -92,6 +149,10 @@ export default function DataPage() {
   };
 
   const listSnapshots = async () => {
+    if (!range) {
+      setBqError("Pick a start and end date for the custom range.");
+      return;
+    }
     setBqLoading(true);
     setBqError("");
     setBqStatus("");
@@ -100,17 +161,34 @@ export default function DataPage() {
       const res = await fetch("/api/bigquery", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "list", site: siteId, limit: 25 }),
+        body: JSON.stringify({
+          action: "list",
+          site: siteId,
+          limit: 25,
+          startDate: range.startDate,
+          endDate: range.endDate,
+        }),
       });
       const data = await res.json();
       if (!res.ok) setBqError(data.error || "BigQuery list failed");
-      else setSnapshots(data.rows || []);
+      else {
+        setSnapshots(data.rows || []);
+        bqLoadedRef.current = true;
+      }
     } catch (e: any) {
       setBqError(e?.message || "Network error");
     } finally {
       setBqLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!range) return;
+    if (gscLoadedRef.current) fetchGsc();
+    if (ga4LoadedRef.current) fetchGa4();
+    if (bqLoadedRef.current) listSnapshots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range?.startDate, range?.endDate, siteId, gscMode]);
 
   const storeGscSnapshot = async () => {
     if (!gscRows.length) {
@@ -193,6 +271,50 @@ export default function DataPage() {
         </div>
       )}
 
+      <div className="mb-6 bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center gap-3">
+        <span className="text-sm font-medium text-ink mr-1">Time range:</span>
+        {(["today", "7d", "30d", "custom"] as TimeFilter[]).map((f) => {
+          const label =
+            f === "today" ? "Today" : f === "custom" ? "Custom" : f;
+          const active = filter === f;
+          return (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`text-sm px-3 py-1.5 rounded-md border transition ${
+                active
+                  ? "bg-accent text-white border-accent"
+                  : "bg-white text-ink border-gray-300 hover:bg-gray-50"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+        {filter === "custom" && (
+          <div className="flex items-center gap-2 ml-1">
+            <input
+              type="date"
+              value={customStart}
+              onChange={(e) => setCustomStart(e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded-md text-sm"
+            />
+            <span className="text-text text-sm">to</span>
+            <input
+              type="date"
+              value={customEnd}
+              onChange={(e) => setCustomEnd(e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded-md text-sm"
+            />
+          </div>
+        )}
+        {range && (
+          <span className="text-xs text-text ml-auto">
+            {range.startDate} → {range.endDate}
+          </span>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-6">
         {/* GSC */}
         <section className="bg-white border border-gray-200 rounded-xl p-6">
@@ -200,7 +322,10 @@ export default function DataPage() {
             <div>
               <h2 className="text-lg font-semibold text-ink">Google Search Console</h2>
               <p className="text-sm text-text">
-                Last 28 days. Switch mode to find declining pages.
+                {range
+                  ? `${range.startDate} → ${range.endDate}. `
+                  : "Pick a range above. "}
+                Switch mode to find declining pages.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -300,7 +425,7 @@ export default function DataPage() {
             <div>
               <h2 className="text-lg font-semibold text-ink">Google Analytics 4</h2>
               <p className="text-sm text-text">
-                Top pages by views (last 28 days).
+                Top pages by views ({range ? `${range.startDate} → ${range.endDate}` : "pick a range above"}).
               </p>
             </div>
             <div className="flex items-center gap-2">
