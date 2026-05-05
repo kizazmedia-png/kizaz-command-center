@@ -58,6 +58,24 @@ interface SnapshotRow {
   payload: any;
 }
 
+interface AnthropicUsage {
+  configured: boolean;
+  error?: string;
+  empty?: boolean;
+  range?: { startDate: string; endDate: string };
+  totalUsd?: number;
+  byModel?: { model: string; usd: number }[];
+  byFeature?: { feature: string; usd: number }[];
+  byTokenType?: { tokenType: string; usd: number }[];
+  daily?: { date: string; usd: number }[];
+  tokens?: {
+    input: number;
+    output: number;
+    cache_read: number;
+    cache_creation: number;
+  };
+}
+
 export default function DataPage() {
   const { data: session, status } = useSession();
   const { siteId, site } = useSite();
@@ -81,9 +99,14 @@ export default function DataPage() {
   const [bqError, setBqError] = useState("");
   const [bqStatus, setBqStatus] = useState("");
 
+  const [anthropicUsage, setAnthropicUsage] = useState<AnthropicUsage | null>(null);
+  const [anthropicLoading, setAnthropicLoading] = useState(false);
+  const [anthropicError, setAnthropicError] = useState("");
+
   const gscLoadedRef = useRef(false);
   const ga4LoadedRef = useRef(false);
   const bqLoadedRef = useRef(false);
+  const anthropicLoadedRef = useRef(false);
 
   const fetchGsc = async () => {
     if (!range) {
@@ -182,11 +205,42 @@ export default function DataPage() {
     }
   };
 
+  const fetchAnthropicUsage = async () => {
+    if (!range) {
+      setAnthropicError("Pick a start and end date for the custom range.");
+      return;
+    }
+    setAnthropicLoading(true);
+    setAnthropicError("");
+    setAnthropicUsage(null);
+    try {
+      const res = await fetch("/api/anthropic-usage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startDate: range.startDate,
+          endDate: range.endDate,
+        }),
+      });
+      const data = (await res.json()) as AnthropicUsage;
+      if (!res.ok) setAnthropicError(data.error || "Anthropic usage fetch failed");
+      else {
+        setAnthropicUsage(data);
+        anthropicLoadedRef.current = true;
+      }
+    } catch (e: any) {
+      setAnthropicError(e?.message || "Network error");
+    } finally {
+      setAnthropicLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!range) return;
     if (gscLoadedRef.current) fetchGsc();
     if (ga4LoadedRef.current) fetchGa4();
     if (bqLoadedRef.current) listSnapshots();
+    if (anthropicLoadedRef.current) fetchAnthropicUsage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range?.startDate, range?.endDate, siteId, gscMode]);
 
@@ -560,7 +614,147 @@ export default function DataPage() {
             </div>
           )}
         </section>
+
+        {/* Claude API spend (this app) */}
+        <section className="bg-white border border-gray-200 rounded-xl p-6">
+          <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-ink">Claude API Spend (this app)</h2>
+              <p className="text-sm text-text">
+                Tracked from this app&apos;s Claude calls.{" "}
+                {range ? `${range.startDate} → ${range.endDate}.` : "Pick a range above."}
+              </p>
+            </div>
+            <button
+              onClick={fetchAnthropicUsage}
+              disabled={anthropicLoading}
+              className="bg-accent hover:bg-accent/90 disabled:opacity-60 text-white text-sm px-4 py-1.5 rounded-md"
+            >
+              {anthropicLoading ? "Loading..." : "Fetch"}
+            </button>
+          </header>
+
+          {anthropicError && <ErrorBox>{anthropicError}</ErrorBox>}
+          {anthropicUsage && !anthropicUsage.configured && (
+            <div className="text-sm border border-dashed border-amber-300 bg-amber-50 text-amber-800 rounded-md p-4">
+              {anthropicUsage.error || "BigQuery not configured."}
+            </div>
+          )}
+          {!anthropicUsage && !anthropicError && !anthropicLoading && (
+            <EmptyState>
+              No data yet. Click Fetch to load Claude spend for the selected range.
+            </EmptyState>
+          )}
+          {anthropicUsage?.configured && anthropicUsage.empty && (
+            <EmptyState>
+              No Claude calls logged yet. Run any AI tool (e.g. /content) and refetch.
+            </EmptyState>
+          )}
+          {anthropicUsage?.configured && !anthropicUsage.empty && (
+            <div className="space-y-6">
+              <div className="flex items-baseline gap-3">
+                <span className="text-3xl font-semibold text-ink">
+                  ${(anthropicUsage.totalUsd ?? 0).toFixed(2)}
+                </span>
+                <span className="text-sm text-text">total spend</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <h3 className="text-sm font-semibold text-ink mb-2">By model</h3>
+                  {anthropicUsage.byModel?.length ? (
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {anthropicUsage.byModel.map((r) => (
+                          <tr key={r.model} className="border-b border-gray-100">
+                            <td className="py-1.5 pr-3 truncate max-w-[200px]">
+                              {r.model}
+                            </td>
+                            <td className="py-1.5 pr-3 text-right tabular-nums">
+                              ${r.usd.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="text-sm text-text">No spend recorded.</p>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold text-ink mb-2">By feature</h3>
+                  {anthropicUsage.byFeature?.length ? (
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {anthropicUsage.byFeature.map((r) => (
+                          <tr key={r.feature} className="border-b border-gray-100">
+                            <td className="py-1.5 pr-3 truncate max-w-[200px]">
+                              {r.feature}
+                            </td>
+                            <td className="py-1.5 pr-3 text-right tabular-nums">
+                              ${r.usd.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="text-sm text-text">No feature data.</p>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold text-ink mb-2">By token type</h3>
+                  {anthropicUsage.byTokenType?.length ? (
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {anthropicUsage.byTokenType.map((r) => (
+                          <tr key={r.tokenType} className="border-b border-gray-100">
+                            <td className="py-1.5 pr-3">{r.tokenType}</td>
+                            <td className="py-1.5 pr-3 text-right tabular-nums">
+                              ${r.usd.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="text-sm text-text">No token spend.</p>
+                  )}
+                </div>
+              </div>
+
+              {anthropicUsage.daily && anthropicUsage.daily.length > 1 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-ink mb-2">Daily</h3>
+                  <DailyBars rows={anthropicUsage.daily} />
+                </div>
+              )}
+            </div>
+          )}
+        </section>
       </div>
+    </div>
+  );
+}
+
+function DailyBars({ rows }: { rows: { date: string; usd: number }[] }) {
+  const max = Math.max(...rows.map((r) => r.usd), 0.01);
+  return (
+    <div className="space-y-1">
+      {rows.map((r) => (
+        <div key={r.date} className="flex items-center gap-3 text-sm">
+          <span className="w-24 text-text tabular-nums">{r.date}</span>
+          <div className="flex-1 bg-gray-100 rounded-sm h-4 relative">
+            <div
+              className="bg-accent h-4 rounded-sm"
+              style={{ width: `${Math.max((r.usd / max) * 100, r.usd > 0 ? 2 : 0)}%` }}
+            />
+          </div>
+          <span className="w-20 text-right tabular-nums">${r.usd.toFixed(2)}</span>
+        </div>
+      ))}
     </div>
   );
 }

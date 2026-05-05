@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createPost } from "@/lib/socialPosts";
+import { logClaudeCall } from "@/lib/claudeUsage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,8 +68,9 @@ export async function POST(req: NextRequest) {
       : `Extract the fact and write the post.`;
 
     const client = new Anthropic({ apiKey });
+    const model = "claude-sonnet-4-6";
     const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model,
       max_tokens: 1024,
       system: SYSTEM,
       messages: [
@@ -83,6 +85,12 @@ export async function POST(req: NextRequest) {
           ],
         },
       ],
+    });
+
+    void logClaudeCall({
+      model,
+      feature: "social-extract",
+      usage: message.usage,
     });
 
     const text = message.content

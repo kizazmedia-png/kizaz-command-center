@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { buildPrompt, ToolId } from "@/lib/prompts";
 import { SiteId, SITES } from "@/lib/sites";
+import { logClaudeCall } from "@/lib/claudeUsage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,11 +38,18 @@ export async function POST(req: NextRequest) {
 
     const client = new Anthropic({ apiKey });
 
+    const model = "claude-sonnet-4-6";
     const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model,
       max_tokens: 4096,
       system,
       messages: [{ role: "user", content: user }],
+    });
+
+    void logClaudeCall({
+      model,
+      feature: `ai:${tool}`,
+      usage: message.usage,
     });
 
     const text = message.content
