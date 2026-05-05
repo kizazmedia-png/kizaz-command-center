@@ -7,6 +7,13 @@ export type ToolId =
   | "article-drafter"
   | "content-repurposer"
   | "content-updater"
+  // DFD article workflow (6-step pipeline)
+  | "dfd-intent"
+  | "dfd-keywords"
+  | "dfd-brief"
+  | "dfd-draft"
+  | "dfd-citations"
+  | "dfd-meta"
   // SEO
   | "title-meta-rewriter"
   | "internal-link-suggester"
@@ -28,6 +35,8 @@ export type ToolId =
   | "content-audit"
   | "site-health"
   | "weekly-report";
+
+const DFD_BRAND_VOICE = `You are a content writer for Dog Friendly Destos, a directory of dog-friendly restaurants, bars, patios, and venues. Write in an upbeat, vibrant tone used by today's pet owners. Content should feel friendly, enthusiastic, and practical — written by a dog lover for dog lovers.`;
 
 export interface PromptResult {
   system: string;
@@ -143,6 +152,105 @@ ${inputs.changes || ""}
 """
 
 Output the fully refreshed article in Markdown. Update stats, dates, examples and recommendations to reflect the new info. Add a brief "Updated [Month Year]" line near the top. Flag any new statistics or claims you introduce with [FACT CHECK].`,
+      };
+
+    // ---- DFD Article Workflow ----
+    case "dfd-intent":
+      return {
+        system: DFD_BRAND_VOICE,
+        user: `Give me reader intent for the keyword '${inputs.keyword || ""}'.
+Include:
+- Primary intent type (informational / commercial / transactional)
+- What the reader actually wants to know (5-7 specific questions they have)
+- Funnel stage (top / mid / bottom)
+- Emotional undercurrent
+- What content angle wins this keyword (e.g. balanced, persuasive, listicle, comparison)`,
+      };
+
+    case "dfd-keywords":
+      return {
+        system: DFD_BRAND_VOICE,
+        user: `Main Keyword: ${inputs.keyword || ""}
+LSI Keywords: ${inputs.lsi || ""}
+Review this keyword list. Flag any that appear to be competitor page artifacts (product names, author names, branded terms unrelated to the topic) so they can be excluded from the brief.`,
+      };
+
+    case "dfd-brief":
+      return {
+        system: DFD_BRAND_VOICE,
+        user: `Using the reader intent analysis and the LSI keyword list provided, build a full content brief for an article targeting '${inputs.keyword || ""}'.
+
+Reader Intent Analysis:
+${inputs.intentAnalysis || ""}
+
+Approved Keyword List:
+${inputs.approvedKeywords || ""}
+
+Include:
+- Target URL slug
+- Search intent classification
+- Recommended word count range
+- H1 recommendation
+- Full H2/H3 structure with section-level word counts
+- What to cover in each section
+- Which keywords belong in each section
+- A keyword placement summary table (keyword | target count | primary section)
+- Notes on any keywords to exclude and why`,
+      };
+
+    case "dfd-draft":
+      return {
+        system: DFD_BRAND_VOICE,
+        user: `Using the content brief provided, write the full article.
+
+Content Brief:
+${inputs.contentBrief || ""}
+
+Requirements:
+- Reading level: ${inputs.readingLevel || "10th Grade Flesch-Kincaid"}
+- Tone: Upbeat, vibrant tone used by today's pet owners
+- Do not use placeholder copy anywhere
+- Follow the H2 structure from the brief exactly
+- Hit the keyword targets from the placement summary
+- End with a CTA section pointing to ${inputs.ctaDestination || ""}
+- Do not write a puff piece — acknowledge real risks or downsides where relevant`,
+      };
+
+    case "dfd-citations":
+      return {
+        system: DFD_BRAND_VOICE,
+        user: `Review the article draft below. Identify every claim that needs a source — statistics, research findings, health guidance, legal references, institutional recommendations.
+
+Article Draft:
+${inputs.articleDraft || ""}
+
+For each claim:
+1. Search for a real, working URL from a credible source (government agencies, academic institutions, peer-reviewed research, established medical publishers)
+2. Replace the unsourced claim with an inline citation linking to that URL
+3. Correct any statistics that were approximated if the real number differs
+4. At the end of the article, add a numbered Sources section with titles and full URLs
+
+Rules:
+- No broken links
+- No paraphrasing that misrepresents the source
+- No placeholder citations
+- Correct the article if sourced data contradicts the original draft`,
+      };
+
+    case "dfd-meta":
+      return {
+        system: DFD_BRAND_VOICE,
+        user: `Write a meta description for this article.
+
+Article:
+${inputs.citedArticle || ""}
+
+Requirements:
+- Include the primary keyword naturally
+- Under 160 characters
+- Conveys the value of the article without being clickbait
+- Matches the tone of the article
+- Provide character count at the end`,
       };
 
     // ---- SEO ----

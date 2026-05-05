@@ -2,8 +2,24 @@
 
 import PageHeader from "@/components/PageHeader";
 import ToolCard, { ToolGrid } from "@/components/ToolCard";
+import DfdArticleWorkflow from "@/components/DfdArticleWorkflow";
+import { useSite } from "@/components/SiteContext";
 
 export default function ContentPage() {
+  const { siteId } = useSite();
+
+  if (siteId === "dfd") {
+    return (
+      <div>
+        <PageHeader
+          title="Article Workflow"
+          subtitle="Six-step pipeline: keyword → intent → keywords → brief → draft → citations → meta."
+        />
+        <DfdArticleWorkflow />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
