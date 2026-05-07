@@ -3,8 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useSite } from "./SiteContext";
+import { SiteId } from "@/lib/sites";
 
-const NAV = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: string;
+  onlyFor?: SiteId;
+}
+
+const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "▦" },
   { href: "/content", label: "Content", icon: "✎" },
   { href: "/seo", label: "SEO", icon: "⌕" },
@@ -12,11 +21,15 @@ const NAV = [
   { href: "/monetization", label: "Monetization", icon: "$" },
   { href: "/operations", label: "Operations", icon: "✓" },
   { href: "/data", label: "Data", icon: "▤" },
+  { href: "/data-pipeline", label: "Data Pipeline", icon: "⛁", onlyFor: "dfd" },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { siteId } = useSite();
+
+  const visibleNav = NAV.filter((item) => !item.onlyFor || item.onlyFor === siteId);
 
   return (
     <>
@@ -50,7 +63,7 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {NAV.map((item) => {
+          {visibleNav.map((item) => {
             const active = pathname?.startsWith(item.href);
             return (
               <Link

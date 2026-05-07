@@ -7,6 +7,12 @@ import { logClaudeCall } from "@/lib/claudeUsage";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const ALLOWED_MODELS = new Set([
+  "claude-opus-4-7",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5",
+]);
+
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -18,6 +24,40 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
+    const client = new Anthropic({ apiKey });
+
+    // Raw prompt mode: caller supplies system, user, model, and a feature label.
+    if (body && typeof body.system === "string" && typeof body.user === "string") {
+      const systemPrompt: string = body.system;
+      const userPrompt: string = body.user;
+      const requestedModel: string = body.model || "claude-haiku-4-5";
+      const model = ALLOWED_MODELS.has(requestedModel)
+        ? requestedModel
+        : "claude-haiku-4-5";
+      const feature: string = body.feature || "ai:raw";
+      const maxTokens: number =
+        typeof body.maxTokens === "number" && body.maxTokens > 0
+          ? Math.min(body.maxTokens, 4096)
+          : 1500;
+
+      const message = await client.messages.create({
+        model,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      });
+
+      void logClaudeCall({ model, feature, usage: message.usage });
+
+      const text = message.content
+        .filter((b: any) => b.type === "text")
+        .map((b: any) => b.text)
+        .join("\n");
+
+      return NextResponse.json({ output: text });
+    }
+
+    // Tool mode (existing behavior).
     const { tool, inputs, site } = body as {
       tool: ToolId;
       inputs: Record<string, any>;
@@ -35,8 +75,6 @@ export async function POST(req: NextRequest) {
     }
 
     const { system, user } = buildPrompt(tool, inputs, site);
-
-    const client = new Anthropic({ apiKey });
 
     const model = "claude-sonnet-4-6";
     const message = await client.messages.create({
