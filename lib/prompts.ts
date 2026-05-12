@@ -7,12 +7,11 @@ export type ToolId =
   | "article-drafter"
   | "content-repurposer"
   | "content-updater"
-  // DFD article workflow (6-step pipeline)
+  // DFD article workflow (5-step pipeline)
   | "dfd-intent"
   | "dfd-keywords"
   | "dfd-brief"
   | "dfd-draft"
-  | "dfd-citations"
   | "dfd-meta"
   // SEO
   | "title-meta-rewriter"
@@ -216,34 +215,13 @@ Requirements:
 - Do not write a puff piece — acknowledge real risks or downsides where relevant`,
       };
 
-    case "dfd-citations":
-      return {
-        system: DFD_BRAND_VOICE,
-        user: `Review the article draft below. Identify every claim that needs a source — statistics, research findings, health guidance, legal references, institutional recommendations.
-
-Article Draft:
-${inputs.articleDraft || ""}
-
-For each claim:
-1. Search for a real, working URL from a credible source (government agencies, academic institutions, peer-reviewed research, established medical publishers)
-2. Replace the unsourced claim with an inline citation linking to that URL
-3. Correct any statistics that were approximated if the real number differs
-4. At the end of the article, add a numbered Sources section with titles and full URLs
-
-Rules:
-- No broken links
-- No paraphrasing that misrepresents the source
-- No placeholder citations
-- Correct the article if sourced data contradicts the original draft`,
-      };
-
     case "dfd-meta":
       return {
         system: DFD_BRAND_VOICE,
         user: `Write a meta description for this article.
 
 Article:
-${inputs.citedArticle || ""}
+${inputs.articleDraft || ""}
 
 Requirements:
 - Include the primary keyword naturally

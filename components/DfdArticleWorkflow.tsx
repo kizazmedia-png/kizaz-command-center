@@ -10,7 +10,6 @@ type StepKey =
   | "keywords"
   | "brief"
   | "draft"
-  | "citations"
   | "meta";
 
 interface StepDef {
@@ -25,7 +24,6 @@ interface StepDef {
     | "approvedKeywords"
     | "contentBrief"
     | "articleDraft"
-    | "citedArticle"
     | "metaDescription";
 }
 
@@ -67,17 +65,8 @@ const STEPS: StepDef[] = [
     outputKey: "articleDraft",
   },
   {
-    key: "citations",
-    number: 5,
-    title: "Source Citations",
-    description: "Find real sources, replace claims with inline citations.",
-    buttonLabel: "Add Citations",
-    tool: "dfd-citations",
-    outputKey: "citedArticle",
-  },
-  {
     key: "meta",
-    number: 6,
+    number: 5,
     title: "Meta Description",
     description: "Write a meta description tuned to the final article.",
     buttonLabel: "Write Meta Description",
@@ -91,7 +80,6 @@ interface Outputs {
   approvedKeywords: string;
   contentBrief: string;
   articleDraft: string;
-  citedArticle: string;
   metaDescription: string;
 }
 
@@ -100,7 +88,6 @@ const EMPTY_OUTPUTS: Outputs = {
   approvedKeywords: "",
   contentBrief: "",
   articleDraft: "",
-  citedArticle: "",
   metaDescription: "",
 };
 
@@ -130,7 +117,6 @@ export default function DfdArticleWorkflow() {
     keywords: false,
     brief: false,
     draft: false,
-    citations: false,
     meta: false,
   });
   const [copiedStep, setCopiedStep] = useState<StepKey | "">("");
@@ -175,10 +161,8 @@ export default function DfdArticleWorkflow() {
           readingLevel,
           ctaDestination,
         };
-      case "citations":
-        return { articleDraft: outputs.articleDraft };
       case "meta":
-        return { citedArticle: outputs.citedArticle };
+        return { articleDraft: outputs.articleDraft };
       default:
         return {};
     }
@@ -279,7 +263,7 @@ export default function DfdArticleWorkflow() {
   };
 
   const sendToWordPress = async () => {
-    if (!outputs.citedArticle) return;
+    if (!outputs.articleDraft) return;
     setPublishing(true);
     setPublishMsg(null);
     try {
@@ -292,7 +276,7 @@ export default function DfdArticleWorkflow() {
         body: JSON.stringify({
           site: siteId,
           title,
-          content: outputs.citedArticle,
+          content: outputs.articleDraft,
           status: "draft",
         }),
       });
@@ -447,17 +431,10 @@ export default function DfdArticleWorkflow() {
                 </>
               )}
 
-              {step.key === "citations" && (
+              {step.key === "meta" && (
                 <ReadOnlyContext
                   label="Article Draft (from Step 4)"
                   value={outputs.articleDraft}
-                />
-              )}
-
-              {step.key === "meta" && (
-                <ReadOnlyContext
-                  label="Cited Article (from Step 5)"
-                  value={outputs.citedArticle}
                 />
               )}
             </fieldset>
@@ -533,14 +510,14 @@ export default function DfdArticleWorkflow() {
         <header className="mb-4">
           <h2 className="text-lg font-semibold text-ink">Publish</h2>
           <p className="text-sm text-text mt-1">
-            Send the cited article (Step 5 output) to the active WordPress site as
+            Send the article draft (Step 4 output) to the active WordPress site as
             a draft.
           </p>
         </header>
         <button
           type="button"
           onClick={sendToWordPress}
-          disabled={!outputs.citedArticle || publishing}
+          disabled={!outputs.articleDraft || publishing}
           className="bg-accent hover:bg-accent/90 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-md transition flex items-center gap-2"
         >
           {publishing && <Spinner />}

@@ -13,7 +13,7 @@ export default function ContentPage() {
       <div>
         <PageHeader
           title="Article Workflow"
-          subtitle="Six-step pipeline: keyword → intent → keywords → brief → draft → citations → meta."
+          subtitle="Five-step pipeline: keyword → intent → keywords → brief → draft → meta."
         />
         <DfdArticleWorkflow />
       </div>
