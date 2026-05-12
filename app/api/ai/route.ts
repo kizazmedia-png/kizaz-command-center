@@ -13,6 +13,34 @@ const ALLOWED_MODELS = new Set([
   "claude-haiku-4-5",
 ]);
 
+const OVERLOAD_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000];
+
+class OverloadedError extends Error {
+  constructor() {
+    super("Anthropic API is temporarily overloaded. Please try again in a moment.");
+    this.name = "OverloadedError";
+  }
+}
+
+async function createMessageWithRetry(
+  client: Anthropic,
+  params: Anthropic.MessageCreateParamsNonStreaming
+) {
+  for (let attempt = 0; attempt <= OVERLOAD_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      return await client.messages.create(params);
+    } catch (err: any) {
+      const status = err?.status ?? err?.response?.status;
+      if (status !== 529) throw err;
+      if (attempt === OVERLOAD_RETRY_DELAYS_MS.length) throw new OverloadedError();
+      await new Promise((resolve) =>
+        setTimeout(resolve, OVERLOAD_RETRY_DELAYS_MS[attempt])
+      );
+    }
+  }
+  throw new OverloadedError();
+}
+
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -40,7 +68,7 @@ export async function POST(req: NextRequest) {
           ? Math.min(body.maxTokens, 4096)
           : 1500;
 
-      const message = await client.messages.create({
+      const message = await createMessageWithRetry(client, {
         model,
         max_tokens: maxTokens,
         system: systemPrompt,
@@ -77,7 +105,7 @@ export async function POST(req: NextRequest) {
     const { system, user } = buildPrompt(tool, inputs, site);
 
     const model = "claude-sonnet-4-6";
-    const message = await client.messages.create({
+    const message = await createMessageWithRetry(client, {
       model,
       max_tokens: 4096,
       system,
@@ -98,6 +126,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ output: text });
   } catch (err: any) {
     console.error("/api/ai error:", err);
+    if (err instanceof OverloadedError) {
+      return NextResponse.json({ error: err.message }, { status: 529 });
+    }
     return NextResponse.json(
       { error: err?.message || "Unknown error in /api/ai" },
       { status: 500 }
