@@ -1,12 +1,24 @@
 "use client";
 
 import PageHeader from "@/components/PageHeader";
+import ClearAllButton from "@/components/ClearAllButton";
 import ToolCard, { ToolGrid } from "@/components/ToolCard";
 import DfdArticleWorkflow from "@/components/DfdArticleWorkflow";
 import { useSite } from "@/components/SiteContext";
+import { useResults } from "@/components/ResultsContext";
+import { ToolId } from "@/lib/prompts";
+
+const CONTENT_TOOL_IDS: ToolId[] = [
+  "topic-finder",
+  "outline-builder",
+  "article-drafter",
+  "content-repurposer",
+  "content-updater",
+];
 
 export default function ContentPage() {
   const { siteId } = useSite();
+  const { clearToolResults, clearDfdWorkflowResults } = useResults();
 
   if (siteId === "dfd") {
     return (
@@ -14,6 +26,7 @@ export default function ContentPage() {
         <PageHeader
           title="Article Workflow"
           subtitle="Five-step pipeline: keyword → intent → keywords → brief → draft → meta."
+          actions={<ClearAllButton onClick={clearDfdWorkflowResults} />}
         />
         <DfdArticleWorkflow />
       </div>
@@ -25,6 +38,9 @@ export default function ContentPage() {
       <PageHeader
         title="Content"
         subtitle="Find topics, build outlines, draft articles, repurpose, and refresh."
+        actions={
+          <ClearAllButton onClick={() => clearToolResults(CONTENT_TOOL_IDS)} />
+        }
       />
       <ToolGrid>
         <ToolCard

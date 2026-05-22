@@ -3,6 +3,7 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import { SiteProvider } from "@/components/SiteContext";
 import AuthProvider from "@/components/AuthProvider";
+import { ResultsProvider } from "@/components/ResultsContext";
 
 export const metadata: Metadata = {
   title: "Kizaz Command Center",
@@ -19,12 +20,14 @@ export default function RootLayout({
       <body className="min-h-screen bg-background text-text font-sans antialiased">
         <AuthProvider>
           <SiteProvider>
-            <div className="md:flex min-h-screen">
-              <Sidebar />
-              <main className="flex-1 px-4 py-6 md:px-10 md:py-8 max-w-[1400px] w-full">
-                {children}
-              </main>
-            </div>
+            <ResultsProvider>
+              <div className="md:flex min-h-screen">
+                <Sidebar />
+                <main className="flex-1 px-4 py-6 md:px-10 md:py-8 max-w-[1400px] w-full">
+                  {children}
+                </main>
+              </div>
+            </ResultsProvider>
           </SiteProvider>
         </AuthProvider>
       </body>

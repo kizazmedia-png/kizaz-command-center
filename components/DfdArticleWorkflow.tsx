@@ -2,29 +2,18 @@
 
 import { useMemo, useState } from "react";
 import { useSite } from "./SiteContext";
+import { DfdStepKey, DfdOutputKey, useResults } from "./ResultsContext";
 import MarkdownView from "./MarkdownView";
 import { ToolId } from "@/lib/prompts";
 
-type StepKey =
-  | "intent"
-  | "keywords"
-  | "brief"
-  | "draft"
-  | "meta";
-
 interface StepDef {
-  key: StepKey;
+  key: DfdStepKey;
   number: number;
   title: string;
   description: string;
   buttonLabel: string;
   tool: ToolId;
-  outputKey:
-    | "intentAnalysis"
-    | "approvedKeywords"
-    | "contentBrief"
-    | "articleDraft"
-    | "metaDescription";
+  outputKey: DfdOutputKey;
 }
 
 const STEPS: StepDef[] = [
@@ -75,61 +64,27 @@ const STEPS: StepDef[] = [
   },
 ];
 
-interface Outputs {
-  intentAnalysis: string;
-  approvedKeywords: string;
-  contentBrief: string;
-  articleDraft: string;
-  metaDescription: string;
-}
-
-const EMPTY_OUTPUTS: Outputs = {
-  intentAnalysis: "",
-  approvedKeywords: "",
-  contentBrief: "",
-  articleDraft: "",
-  metaDescription: "",
-};
-
 export default function DfdArticleWorkflow() {
   const { siteId } = useSite();
+  const { dfdWorkflow, setDfdWorkflow } = useResults();
+  const {
+    targetKeyword,
+    keywordsKeyword,
+    lsiTable,
+    briefKeyword,
+    readingLevel,
+    ctaDestination,
+    outputs,
+    loadingStep,
+    errorStep,
+    collapsed,
+    publishing,
+    publishMsg,
+  } = dfdWorkflow;
 
-  // Step inputs
-  const [targetKeyword, setTargetKeyword] = useState("");
-  const [keywordsKeyword, setKeywordsKeyword] = useState("");
-  const [lsiTable, setLsiTable] = useState("");
-  const [briefKeyword, setBriefKeyword] = useState("");
-  const [readingLevel, setReadingLevel] = useState(
-    "10th Grade Flesch-Kincaid"
-  );
-  const [ctaDestination, setCtaDestination] = useState("");
+  const [copiedStep, setCopiedStep] = useState<DfdStepKey | "">("");
 
-  // Step outputs
-  const [outputs, setOutputs] = useState<Outputs>(EMPTY_OUTPUTS);
-
-  // Per-step UI state
-  const [loadingStep, setLoadingStep] = useState<StepKey | "">("");
-  const [errorStep, setErrorStep] = useState<{ step: StepKey; msg: string } | null>(
-    null
-  );
-  const [collapsed, setCollapsed] = useState<Record<StepKey, boolean>>({
-    intent: false,
-    keywords: false,
-    brief: false,
-    draft: false,
-    meta: false,
-  });
-  const [copiedStep, setCopiedStep] = useState<StepKey | "">("");
-
-  // Publish state
-  const [publishing, setPublishing] = useState(false);
-  const [publishMsg, setPublishMsg] = useState<{
-    kind: "ok" | "err";
-    text: string;
-    url?: string;
-  } | null>(null);
-
-  const stepStatus = (key: StepKey): "complete" | "ready" | "locked" => {
+  const stepStatus = (key: DfdStepKey): "complete" | "ready" | "locked" => {
     const idx = STEPS.findIndex((s) => s.key === key);
     const prev = idx > 0 ? STEPS[idx - 1] : null;
     const out = outputs[STEPS[idx].outputKey];
@@ -143,7 +98,7 @@ export default function DfdArticleWorkflow() {
     [outputs]
   );
 
-  const buildInputs = (key: StepKey): Record<string, any> => {
+  const buildInputs = (key: DfdStepKey): Record<string, any> => {
     switch (key) {
       case "intent":
         return { keyword: targetKeyword };
@@ -168,7 +123,7 @@ export default function DfdArticleWorkflow() {
     }
   };
 
-  const validateStep = (key: StepKey): string => {
+  const validateStep = (key: DfdStepKey): string => {
     switch (key) {
       case "intent":
         if (!targetKeyword.trim()) return "Please enter a target keyword.";
@@ -194,11 +149,10 @@ export default function DfdArticleWorkflow() {
   const runStep = async (step: StepDef) => {
     const validation = validateStep(step.key);
     if (validation) {
-      setErrorStep({ step: step.key, msg: validation });
+      setDfdWorkflow({ errorStep: { step: step.key, msg: validation } });
       return;
     }
-    setErrorStep(null);
-    setLoadingStep(step.key);
+    setDfdWorkflow({ errorStep: null, loadingStep: step.key });
     try {
       const res = await fetch("/api/ai", {
         method: "POST",
@@ -211,42 +165,48 @@ export default function DfdArticleWorkflow() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setErrorStep({
-          step: step.key,
-          msg: data?.error || `Request failed (${res.status})`,
+        setDfdWorkflow({
+          errorStep: {
+            step: step.key,
+            msg: data?.error || `Request failed (${res.status})`,
+          },
         });
       } else {
         const text: string = data.output || "";
-        setOutputs((o) => ({ ...o, [step.outputKey]: text }));
-
-        // Pre-fill subsequent step inputs from completed step
-        if (step.key === "intent" && !keywordsKeyword.trim()) {
-          setKeywordsKeyword(targetKeyword);
-        }
-        if (step.key === "keywords" && !briefKeyword.trim()) {
-          setBriefKeyword(keywordsKeyword || targetKeyword);
-        }
-
-        // Collapse this step, expand the next one
-        setCollapsed((c) => {
-          const next = { ...c, [step.key]: true };
+        setDfdWorkflow((prev) => {
+          const nextCollapsed = { ...prev.collapsed, [step.key]: true };
           const idx = STEPS.findIndex((s) => s.key === step.key);
           const nextStep = STEPS[idx + 1];
-          if (nextStep) next[nextStep.key] = false;
-          return next;
+          if (nextStep) nextCollapsed[nextStep.key] = false;
+
+          const patch: any = {
+            outputs: { ...prev.outputs, [step.outputKey]: text },
+            collapsed: nextCollapsed,
+          };
+
+          // Pre-fill subsequent step inputs from completed step
+          if (step.key === "intent" && !prev.keywordsKeyword.trim()) {
+            patch.keywordsKeyword = prev.targetKeyword;
+          }
+          if (step.key === "keywords" && !prev.briefKeyword.trim()) {
+            patch.briefKeyword = prev.keywordsKeyword || prev.targetKeyword;
+          }
+          return patch;
         });
       }
     } catch (e: any) {
-      setErrorStep({
-        step: step.key,
-        msg: e?.message || "Network error",
+      setDfdWorkflow({
+        errorStep: {
+          step: step.key,
+          msg: e?.message || "Network error",
+        },
       });
     } finally {
-      setLoadingStep("");
+      setDfdWorkflow({ loadingStep: "" });
     }
   };
 
-  const copyOutput = async (key: StepKey, text: string) => {
+  const copyOutput = async (key: DfdStepKey, text: string) => {
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
@@ -258,14 +218,15 @@ export default function DfdArticleWorkflow() {
   };
 
   const clearOutput = (step: StepDef) => {
-    setOutputs((o) => ({ ...o, [step.outputKey]: "" }));
-    setCollapsed((c) => ({ ...c, [step.key]: false }));
+    setDfdWorkflow((prev) => ({
+      outputs: { ...prev.outputs, [step.outputKey]: "" },
+      collapsed: { ...prev.collapsed, [step.key]: false },
+    }));
   };
 
   const sendToWordPress = async () => {
     if (!outputs.articleDraft) return;
-    setPublishing(true);
-    setPublishMsg(null);
+    setDfdWorkflow({ publishing: true, publishMsg: null });
     try {
       const title =
         (briefKeyword || targetKeyword || "Untitled draft").trim() ||
@@ -282,24 +243,30 @@ export default function DfdArticleWorkflow() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setPublishMsg({
-          kind: "err",
-          text: data?.error || `WordPress request failed (${res.status})`,
+        setDfdWorkflow({
+          publishMsg: {
+            kind: "err",
+            text: data?.error || `WordPress request failed (${res.status})`,
+          },
         });
       } else {
-        setPublishMsg({
-          kind: "ok",
-          text: "Draft created in WordPress.",
-          url: data?.editUrl || data?.url || "",
+        setDfdWorkflow({
+          publishMsg: {
+            kind: "ok",
+            text: "Draft created in WordPress.",
+            url: data?.editUrl || data?.url || "",
+          },
         });
       }
     } catch (e: any) {
-      setPublishMsg({
-        kind: "err",
-        text: e?.message || "Network error sending to WordPress",
+      setDfdWorkflow({
+        publishMsg: {
+          kind: "err",
+          text: e?.message || "Network error sending to WordPress",
+        },
       });
     } finally {
-      setPublishing(false);
+      setDfdWorkflow({ publishing: false });
     }
   };
 
@@ -365,7 +332,7 @@ export default function DfdArticleWorkflow() {
                   label="Target Keyword"
                   required
                   value={targetKeyword}
-                  onChange={setTargetKeyword}
+                  onChange={(v) => setDfdWorkflow({ targetKeyword: v })}
                   placeholder="e.g. dog friendly patios austin"
                 />
               )}
@@ -376,14 +343,14 @@ export default function DfdArticleWorkflow() {
                     label="Main Keyword"
                     required
                     value={keywordsKeyword}
-                    onChange={setKeywordsKeyword}
+                    onChange={(v) => setDfdWorkflow({ keywordsKeyword: v })}
                     placeholder="Pre-filled from Step 1"
                   />
                   <TextAreaField
                     label="LSI Keywords (paste table with mention counts)"
                     required
                     value={lsiTable}
-                    onChange={setLsiTable}
+                    onChange={(v) => setDfdWorkflow({ lsiTable: v })}
                     rows={8}
                     placeholder={"keyword\tmentions\ndog patio\t12\n..."}
                   />
@@ -404,7 +371,7 @@ export default function DfdArticleWorkflow() {
                     label="Target Keyword"
                     required
                     value={briefKeyword}
-                    onChange={setBriefKeyword}
+                    onChange={(v) => setDfdWorkflow({ briefKeyword: v })}
                     placeholder="Pre-filled from Step 1"
                   />
                 </>
@@ -419,13 +386,13 @@ export default function DfdArticleWorkflow() {
                   <TextField
                     label="Reading Level"
                     value={readingLevel}
-                    onChange={setReadingLevel}
+                    onChange={(v) => setDfdWorkflow({ readingLevel: v })}
                   />
                   <TextField
                     label="CTA points to (URL or page name)"
                     required
                     value={ctaDestination}
-                    onChange={setCtaDestination}
+                    onChange={(v) => setDfdWorkflow({ ctaDestination: v })}
                     placeholder="e.g. https://dogfriendlydestos.com/austin"
                   />
                 </>
@@ -467,7 +434,12 @@ export default function DfdArticleWorkflow() {
                   <button
                     type="button"
                     onClick={() =>
-                      setCollapsed((c) => ({ ...c, [step.key]: !c[step.key] }))
+                      setDfdWorkflow((prev) => ({
+                        collapsed: {
+                          ...prev.collapsed,
+                          [step.key]: !prev.collapsed[step.key],
+                        },
+                      }))
                     }
                     className="text-sm font-semibold text-ink flex items-center gap-2"
                   >

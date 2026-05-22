@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useSession, signIn } from "next-auth/react";
 import PageHeader from "@/components/PageHeader";
+import ClearAllButton from "@/components/ClearAllButton";
 import { useSite } from "@/components/SiteContext";
-
-type TimeFilter = "today" | "7d" | "30d" | "custom";
+import {
+  AnthropicUsage,
+  DataTimeFilter,
+  useResults,
+} from "@/components/ResultsContext";
 
 function computeRange(
-  filter: TimeFilter,
+  filter: DataTimeFilter,
   customStart?: string,
   customEnd?: string
 ): { startDate: string; endDate: string } | null {
@@ -30,92 +34,42 @@ function computeRange(
   return null;
 }
 
-interface GscRow {
-  page: string;
-  clicks: number;
-  impressions: number;
-  ctr: number;
-  position: number;
-  recentClicks?: number;
-  priorClicks?: number;
-  delta?: number;
-  pct?: number;
-}
-
-interface Ga4Row {
-  pagePath: string;
-  pageTitle: string;
-  views: number;
-  sessions: number;
-  bounceRate: number;
-}
-
-interface SnapshotRow {
-  captured_at: string | { value: string };
-  site: string;
-  source: string;
-  label: string | null;
-  payload: any;
-}
-
-interface AnthropicUsage {
-  configured: boolean;
-  error?: string;
-  empty?: boolean;
-  range?: { startDate: string; endDate: string };
-  totalUsd?: number;
-  byModel?: { model: string; usd: number }[];
-  byFeature?: { feature: string; usd: number }[];
-  byTokenType?: { tokenType: string; usd: number }[];
-  daily?: { date: string; usd: number }[];
-  tokens?: {
-    input: number;
-    output: number;
-    cache_read: number;
-    cache_creation: number;
-  };
-}
-
 export default function DataPage() {
   const { data: session, status } = useSession();
   const { siteId, site } = useSite();
+  const { dataPage, setDataPage, clearDataPageResults } = useResults();
+  const {
+    filter,
+    customStart,
+    customEnd,
+    gscMode,
+    gscRows,
+    gscLoading,
+    gscError,
+    gscLoaded,
+    ga4Rows,
+    ga4Loading,
+    ga4Error,
+    ga4Loaded,
+    snapshots,
+    bqLoading,
+    bqError,
+    bqStatus,
+    bqLoaded,
+    anthropicUsage,
+    anthropicLoading,
+    anthropicError,
+    anthropicLoaded,
+  } = dataPage;
 
-  const [filter, setFilter] = useState<TimeFilter>("today");
-  const [customStart, setCustomStart] = useState("");
-  const [customEnd, setCustomEnd] = useState("");
   const range = computeRange(filter, customStart, customEnd);
-
-  const [gscMode, setGscMode] = useState<"topPages" | "declining">("topPages");
-  const [gscRows, setGscRows] = useState<GscRow[]>([]);
-  const [gscLoading, setGscLoading] = useState(false);
-  const [gscError, setGscError] = useState("");
-
-  const [ga4Rows, setGa4Rows] = useState<Ga4Row[]>([]);
-  const [ga4Loading, setGa4Loading] = useState(false);
-  const [ga4Error, setGa4Error] = useState("");
-
-  const [snapshots, setSnapshots] = useState<SnapshotRow[]>([]);
-  const [bqLoading, setBqLoading] = useState(false);
-  const [bqError, setBqError] = useState("");
-  const [bqStatus, setBqStatus] = useState("");
-
-  const [anthropicUsage, setAnthropicUsage] = useState<AnthropicUsage | null>(null);
-  const [anthropicLoading, setAnthropicLoading] = useState(false);
-  const [anthropicError, setAnthropicError] = useState("");
-
-  const gscLoadedRef = useRef(false);
-  const ga4LoadedRef = useRef(false);
-  const bqLoadedRef = useRef(false);
-  const anthropicLoadedRef = useRef(false);
 
   const fetchGsc = async () => {
     if (!range) {
-      setGscError("Pick a start and end date for the custom range.");
+      setDataPage({ gscError: "Pick a start and end date for the custom range." });
       return;
     }
-    setGscLoading(true);
-    setGscError("");
-    setGscRows([]);
+    setDataPage({ gscLoading: true, gscError: "", gscRows: [] });
     try {
       const res = await fetch("/api/gsc", {
         method: "POST",
@@ -128,26 +82,21 @@ export default function DataPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) setGscError(data.error || "GSC fetch failed");
-      else {
-        setGscRows(data.rows || []);
-        gscLoadedRef.current = true;
-      }
+      if (!res.ok) setDataPage({ gscError: data.error || "GSC fetch failed" });
+      else setDataPage({ gscRows: data.rows || [], gscLoaded: true });
     } catch (e: any) {
-      setGscError(e?.message || "Network error");
+      setDataPage({ gscError: e?.message || "Network error" });
     } finally {
-      setGscLoading(false);
+      setDataPage({ gscLoading: false });
     }
   };
 
   const fetchGa4 = async () => {
     if (!range) {
-      setGa4Error("Pick a start and end date for the custom range.");
+      setDataPage({ ga4Error: "Pick a start and end date for the custom range." });
       return;
     }
-    setGa4Loading(true);
-    setGa4Error("");
-    setGa4Rows([]);
+    setDataPage({ ga4Loading: true, ga4Error: "", ga4Rows: [] });
     try {
       const res = await fetch("/api/ga4", {
         method: "POST",
@@ -159,27 +108,21 @@ export default function DataPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) setGa4Error(data.error || "GA4 fetch failed");
-      else {
-        setGa4Rows(data.rows || []);
-        ga4LoadedRef.current = true;
-      }
+      if (!res.ok) setDataPage({ ga4Error: data.error || "GA4 fetch failed" });
+      else setDataPage({ ga4Rows: data.rows || [], ga4Loaded: true });
     } catch (e: any) {
-      setGa4Error(e?.message || "Network error");
+      setDataPage({ ga4Error: e?.message || "Network error" });
     } finally {
-      setGa4Loading(false);
+      setDataPage({ ga4Loading: false });
     }
   };
 
   const listSnapshots = async () => {
     if (!range) {
-      setBqError("Pick a start and end date for the custom range.");
+      setDataPage({ bqError: "Pick a start and end date for the custom range." });
       return;
     }
-    setBqLoading(true);
-    setBqError("");
-    setBqStatus("");
-    setSnapshots([]);
+    setDataPage({ bqLoading: true, bqError: "", bqStatus: "", snapshots: [] });
     try {
       const res = await fetch("/api/bigquery", {
         method: "POST",
@@ -193,26 +136,27 @@ export default function DataPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) setBqError(data.error || "BigQuery list failed");
-      else {
-        setSnapshots(data.rows || []);
-        bqLoadedRef.current = true;
-      }
+      if (!res.ok) setDataPage({ bqError: data.error || "BigQuery list failed" });
+      else setDataPage({ snapshots: data.rows || [], bqLoaded: true });
     } catch (e: any) {
-      setBqError(e?.message || "Network error");
+      setDataPage({ bqError: e?.message || "Network error" });
     } finally {
-      setBqLoading(false);
+      setDataPage({ bqLoading: false });
     }
   };
 
   const fetchAnthropicUsage = async () => {
     if (!range) {
-      setAnthropicError("Pick a start and end date for the custom range.");
+      setDataPage({
+        anthropicError: "Pick a start and end date for the custom range.",
+      });
       return;
     }
-    setAnthropicLoading(true);
-    setAnthropicError("");
-    setAnthropicUsage(null);
+    setDataPage({
+      anthropicLoading: true,
+      anthropicError: "",
+      anthropicUsage: null,
+    });
     try {
       const res = await fetch("/api/anthropic-usage", {
         method: "POST",
@@ -223,35 +167,39 @@ export default function DataPage() {
         }),
       });
       const data = (await res.json()) as AnthropicUsage;
-      if (!res.ok) setAnthropicError(data.error || "Anthropic usage fetch failed");
-      else {
-        setAnthropicUsage(data);
-        anthropicLoadedRef.current = true;
-      }
+      if (!res.ok)
+        setDataPage({ anthropicError: data.error || "Anthropic usage fetch failed" });
+      else setDataPage({ anthropicUsage: data, anthropicLoaded: true });
     } catch (e: any) {
-      setAnthropicError(e?.message || "Network error");
+      setDataPage({ anthropicError: e?.message || "Network error" });
     } finally {
-      setAnthropicLoading(false);
+      setDataPage({ anthropicLoading: false });
     }
   };
 
+  // Only auto-refetch when filter/site/mode actually change after the user
+  // has previously loaded that data source. Skip the auto-fire on remount so
+  // navigating back to /data doesn't re-hit the APIs.
+  const isFirstMountRef = useRef(true);
   useEffect(() => {
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      return;
+    }
     if (!range) return;
-    if (gscLoadedRef.current) fetchGsc();
-    if (ga4LoadedRef.current) fetchGa4();
-    if (bqLoadedRef.current) listSnapshots();
-    if (anthropicLoadedRef.current) fetchAnthropicUsage();
+    if (gscLoaded) fetchGsc();
+    if (ga4Loaded) fetchGa4();
+    if (bqLoaded) listSnapshots();
+    if (anthropicLoaded) fetchAnthropicUsage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range?.startDate, range?.endDate, siteId, gscMode]);
 
   const storeGscSnapshot = async () => {
     if (!gscRows.length) {
-      setBqError("Fetch GSC data first to store a snapshot.");
+      setDataPage({ bqError: "Fetch GSC data first to store a snapshot." });
       return;
     }
-    setBqLoading(true);
-    setBqError("");
-    setBqStatus("");
+    setDataPage({ bqLoading: true, bqError: "", bqStatus: "" });
     try {
       const res = await fetch("/api/bigquery", {
         method: "POST",
@@ -265,23 +213,21 @@ export default function DataPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) setBqError(data.error || "Store failed");
-      else setBqStatus("Snapshot stored.");
+      if (!res.ok) setDataPage({ bqError: data.error || "Store failed" });
+      else setDataPage({ bqStatus: "Snapshot stored." });
     } catch (e: any) {
-      setBqError(e?.message || "Network error");
+      setDataPage({ bqError: e?.message || "Network error" });
     } finally {
-      setBqLoading(false);
+      setDataPage({ bqLoading: false });
     }
   };
 
   const storeGa4Snapshot = async () => {
     if (!ga4Rows.length) {
-      setBqError("Fetch GA4 data first to store a snapshot.");
+      setDataPage({ bqError: "Fetch GA4 data first to store a snapshot." });
       return;
     }
-    setBqLoading(true);
-    setBqError("");
-    setBqStatus("");
+    setDataPage({ bqLoading: true, bqError: "", bqStatus: "" });
     try {
       const res = await fetch("/api/bigquery", {
         method: "POST",
@@ -295,12 +241,12 @@ export default function DataPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) setBqError(data.error || "Store failed");
-      else setBqStatus("Snapshot stored.");
+      if (!res.ok) setDataPage({ bqError: data.error || "Store failed" });
+      else setDataPage({ bqStatus: "Snapshot stored." });
     } catch (e: any) {
-      setBqError(e?.message || "Network error");
+      setDataPage({ bqError: e?.message || "Network error" });
     } finally {
-      setBqLoading(false);
+      setDataPage({ bqLoading: false });
     }
   };
 
@@ -309,6 +255,7 @@ export default function DataPage() {
       <PageHeader
         title="Data"
         subtitle="Search Console, GA4, and BigQuery historical snapshots."
+        actions={<ClearAllButton onClick={clearDataPageResults} />}
       />
 
       {status !== "loading" && !session && (
@@ -327,14 +274,14 @@ export default function DataPage() {
 
       <div className="mb-6 bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center gap-3">
         <span className="text-sm font-medium text-ink mr-1">Time range:</span>
-        {(["today", "7d", "30d", "custom"] as TimeFilter[]).map((f) => {
+        {(["today", "7d", "30d", "custom"] as DataTimeFilter[]).map((f) => {
           const label =
             f === "today" ? "Today" : f === "custom" ? "Custom" : f;
           const active = filter === f;
           return (
             <button
               key={f}
-              onClick={() => setFilter(f)}
+              onClick={() => setDataPage({ filter: f })}
               className={`text-sm px-3 py-1.5 rounded-md border transition ${
                 active
                   ? "bg-accent text-white border-accent"
@@ -350,14 +297,14 @@ export default function DataPage() {
             <input
               type="date"
               value={customStart}
-              onChange={(e) => setCustomStart(e.target.value)}
+              onChange={(e) => setDataPage({ customStart: e.target.value })}
               className="px-2 py-1 border border-gray-300 rounded-md text-sm"
             />
             <span className="text-text text-sm">to</span>
             <input
               type="date"
               value={customEnd}
-              onChange={(e) => setCustomEnd(e.target.value)}
+              onChange={(e) => setDataPage({ customEnd: e.target.value })}
               className="px-2 py-1 border border-gray-300 rounded-md text-sm"
             />
           </div>
@@ -385,7 +332,7 @@ export default function DataPage() {
             <div className="flex items-center gap-2">
               <select
                 value={gscMode}
-                onChange={(e) => setGscMode(e.target.value as any)}
+                onChange={(e) => setDataPage({ gscMode: e.target.value as any })}
                 className="px-3 py-1.5 border border-gray-300 rounded-md text-sm"
               >
                 <option value="topPages">Top pages by clicks</option>

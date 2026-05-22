@@ -2,14 +2,28 @@
 
 import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
+import ClearAllButton from "@/components/ClearAllButton";
 import ToolCard, { ToolGrid } from "@/components/ToolCard";
+import { useResults } from "@/components/ResultsContext";
+import { ToolId } from "@/lib/prompts";
+
+const SOCIAL_TOOL_IDS: ToolId[] = [
+  "newsletter-generator",
+  "caption-writer",
+  "content-calendar",
+  "hook-writer",
+];
 
 export default function SocialPage() {
+  const { clearToolResults } = useResults();
   return (
     <div>
       <PageHeader
         title="Email & Social"
         subtitle="Newsletters, captions, calendars, and hooks."
+        actions={
+          <ClearAllButton onClick={() => clearToolResults(SOCIAL_TOOL_IDS)} />
+        }
       />
 
       <Link

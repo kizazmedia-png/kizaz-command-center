@@ -1,6 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
+import {
+  PipelineFileSlot,
+  PipelineRow,
+  PipelineStepStatus,
+  useResults,
+} from "./ResultsContext";
 
 // ---------- Output schema ----------
 
@@ -372,90 +378,72 @@ function stateMatches(rowState: string, selected: string): boolean {
 
 // ---------- Component ----------
 
-interface FileSlot {
-  file: File | null;
-  rows: string[][] | null;
-  error: string;
-}
-
-interface StepStatus {
-  state: "idle" | "running" | "done" | "error";
-  message: string;
-}
-
 const TOTAL_STEPS = 5;
 
 export default function DfdDataPipeline() {
-  const [outscraper, setOutscraper] = useState<FileSlot>({
-    file: null,
-    rows: null,
-    error: "",
-  });
-  const [reviewsRaw, setReviewsRaw] = useState<FileSlot>({
-    file: null,
-    rows: null,
-    error: "",
-  });
-  const [photosRaw, setPhotosRaw] = useState<FileSlot>({
-    file: null,
-    rows: null,
-    error: "",
-  });
-
-  const [stepStatus, setStepStatus] = useState<StepStatus[]>(
-    Array.from({ length: TOTAL_STEPS }, () => ({ state: "idle", message: "" }))
-  );
-  const [working, setWorking] = useState<Row[]>([]);
-  const [step4Progress, setStep4Progress] = useState<{
-    current: number;
-    total: number;
-  } | null>(null);
-  const [selectedState, setSelectedState] = useState("all");
-
-  const cancelStep4Ref = useRef(false);
+  const { dataPipeline, setDataPipeline, cancelStep4Ref } = useResults();
+  const {
+    outscraper,
+    reviewsRaw,
+    photosRaw,
+    stepStatus,
+    working,
+    step4Progress,
+    selectedState,
+  } = dataPipeline;
 
   const allFilesReady =
     !!outscraper.rows && !!reviewsRaw.rows && !!photosRaw.rows;
 
   const completedSteps = stepStatus.filter((s) => s.state === "done").length;
 
-  const updateStep = (idx: number, patch: Partial<StepStatus>) => {
-    setStepStatus((prev) => {
-      const next = [...prev];
+  const updateStep = (idx: number, patch: Partial<PipelineStepStatus>) => {
+    setDataPipeline((prev) => {
+      const next = [...prev.stepStatus];
       next[idx] = { ...next[idx], ...patch };
-      return next;
+      return { stepStatus: next };
     });
   };
 
   const resetStepsAfter = (idx: number) => {
-    setStepStatus((prev) => {
-      const next = [...prev];
+    setDataPipeline((prev) => {
+      const next = [...prev.stepStatus];
       for (let i = idx; i < next.length; i++) {
         next[i] = { state: "idle", message: "" };
       }
-      return next;
+      return { stepStatus: next };
     });
+  };
+
+  type SlotKey = "outscraper" | "reviewsRaw" | "photosRaw";
+  const setSlot = (key: SlotKey, slot: PipelineFileSlot) => {
+    setDataPipeline({ [key]: slot } as any);
   };
 
   // ---------- File loading ----------
 
   const handleFile = async (
     file: File,
-    setter: (s: FileSlot) => void,
+    key: SlotKey,
     label: string
   ) => {
     try {
       const text = await file.text();
       const rows = parseCSV(text);
       if (!rows.length) throw new Error("Empty CSV");
-      setter({ file, rows, error: "" });
+      setSlot(key, { file, rows, error: "" });
     } catch (e: any) {
-      setter({ file, rows: null, error: e?.message || `Could not parse ${label}` });
+      setSlot(key, { file, rows: null, error: e?.message || `Could not parse ${label}` });
     }
     // Any file change invalidates the pipeline.
-    setWorking([]);
-    setStep4Progress(null);
-    resetStepsAfter(0);
+    setDataPipeline({
+      working: [],
+      step4Progress: null,
+      stepStatus: Array.from({ length: TOTAL_STEPS }, () => ({
+        state: "idle" as const,
+        message: "",
+      })),
+    });
   };
 
   // ---------- Step 1: Convert + Filter Outscraper ----------
@@ -518,7 +506,7 @@ export default function DfdDataPipeline() {
         row.image_title = "";
         out.push(row);
       }
-      setWorking(out);
+      setDataPipeline({ working: out as PipelineRow[] });
       updateStep(0, {
         state: "done",
         message: `${out.length} rows processed`,
@@ -553,7 +541,7 @@ export default function DfdDataPipeline() {
 
       let matched = 0;
       const matchedKeys = new Set<string>();
-      const updated = working.map((row) => {
+      const updated = (working as Row[]).map((row) => {
         const key = (row.post_title || "").toLowerCase();
         const reviews = reviewMap.get(key);
         if (reviews && reviews.length) {
@@ -581,7 +569,7 @@ export default function DfdDataPipeline() {
       const reviewKeysCount = reviewMap.size;
       const unmatched = reviewKeysCount - matchedKeys.size;
 
-      setWorking(filtered);
+      setDataPipeline({ working: filtered as PipelineRow[] });
       updateStep(1, {
         state: "done",
         message: `${matched} matched, ${removed} removed (not dog friendly), ${unmatched} unmatched`,
@@ -613,7 +601,7 @@ export default function DfdDataPipeline() {
 
       let matched = 0;
       const matchedKeys = new Set<string>();
-      const updated = working.map((row) => {
+      const updated = (working as Row[]).map((row) => {
         const key = (row.post_title || "").toLowerCase();
         const url = photoMap.get(key);
         if (url) {
@@ -632,7 +620,7 @@ export default function DfdDataPipeline() {
       const photoKeysCount = photoMap.size;
       const unmatched = photoKeysCount - matchedKeys.size;
 
-      setWorking(updated);
+      setDataPipeline({ working: updated as PipelineRow[] });
       updateStep(2, {
         state: "done",
         message: `${matched} matched, ${unmatched} unmatched`,
@@ -651,7 +639,7 @@ export default function DfdDataPipeline() {
     cancelStep4Ref.current = false;
 
     const indices: number[] = [];
-    working.forEach((row, i) => {
+    (working as Row[]).forEach((row, i) => {
       if (!row.post_content || row.post_content.length <= 50) {
         indices.push(i);
       }
@@ -666,12 +654,12 @@ export default function DfdDataPipeline() {
       return;
     }
 
-    setStep4Progress({ current: 0, total: indices.length });
+    setDataPipeline({ step4Progress: { current: 0, total: indices.length } });
 
     let generated = 0;
     let skipped = working.length - indices.length;
     let errors = 0;
-    const next = [...working];
+    const next = [...(working as Row[])];
 
     for (let n = 0; n < indices.length; n++) {
       if (cancelStep4Ref.current) break;
@@ -707,7 +695,7 @@ export default function DfdDataPipeline() {
           body: JSON.stringify({
             system: systemPrompt,
             user: userPrompt,
-            model: "claude-haiku-4-5",
+            model: "claude-sonnet-4-6",
             feature: "data-pipeline:post-content",
             maxTokens: 1500,
           }),
@@ -723,8 +711,10 @@ export default function DfdDataPipeline() {
         errors++;
       }
 
-      setStep4Progress({ current: n + 1, total: indices.length });
-      setWorking([...next]);
+      setDataPipeline({
+        step4Progress: { current: n + 1, total: indices.length },
+        working: [...next] as PipelineRow[],
+      });
 
       // Rate-limit delay
       if (n < indices.length - 1) {
@@ -732,7 +722,7 @@ export default function DfdDataPipeline() {
       }
     }
 
-    setStep4Progress(null);
+    setDataPipeline({ step4Progress: null });
     if (cancelStep4Ref.current) {
       updateStep(3, {
         state: "error",
@@ -757,7 +747,7 @@ export default function DfdDataPipeline() {
     if (stepStatus[3].state !== "done") return;
     updateStep(4, { state: "running", message: "" });
     try {
-      const next = working.map((row) => {
+      const next = (working as Row[]).map((row) => {
         const slug = categorySlug(row.post_tags);
         const formatted = formatBusinessHours(row.business_hours, row.time_zone);
         return {
@@ -766,7 +756,7 @@ export default function DfdDataPipeline() {
           business_hours: formatted || row.business_hours,
         };
       });
-      setWorking(next);
+      setDataPipeline({ working: next as PipelineRow[] });
       updateStep(4, {
         state: "done",
         message: `${next.length} rows processed`,
@@ -779,8 +769,9 @@ export default function DfdDataPipeline() {
   // ---------- Download ----------
 
   const filteredRows = useMemo(() => {
-    if (selectedState === "all") return working;
-    return working.filter((r) => stateMatches(r.state, selectedState));
+    const rows = working as Row[];
+    if (selectedState === "all") return rows;
+    return rows.filter((r) => stateMatches(r.state, selectedState));
   }, [working, selectedState]);
 
   const downloadCSV = () => {
@@ -839,19 +830,19 @@ export default function DfdDataPipeline() {
             label="Outscraper Data"
             description="Main business listings export"
             slot={outscraper}
-            onSelect={(file) => handleFile(file, setOutscraper, "Outscraper Data")}
+            onSelect={(file) => handleFile(file, "outscraper", "Outscraper Data")}
           />
           <FileUpload
             label="Reviews Raw"
             description="Col A = business name, Col B = review text"
             slot={reviewsRaw}
-            onSelect={(file) => handleFile(file, setReviewsRaw, "Reviews Raw")}
+            onSelect={(file) => handleFile(file, "reviewsRaw", "Reviews Raw")}
           />
           <FileUpload
             label="Photos Raw"
             description="Col B = business name, Col H = photo URL"
             slot={photosRaw}
-            onSelect={(file) => handleFile(file, setPhotosRaw, "Photos Raw")}
+            onSelect={(file) => handleFile(file, "photosRaw", "Photos Raw")}
           />
         </div>
       </section>
@@ -887,7 +878,7 @@ export default function DfdDataPipeline() {
       <StepCard
         number={4}
         title="Generate post_content (AI)"
-        description="Use Claude Haiku to draft a ~350-word description for each row. Sequential with a 500ms delay."
+        description="Use Claude Sonnet 4.6 to draft a ~350-word description for each row. Sequential with a 500ms delay."
         status={stepStatus[3]}
         canRun={stepStatus[2].state === "done"}
         onRun={runStep4}
@@ -930,7 +921,7 @@ export default function DfdDataPipeline() {
           <label className="text-sm font-medium text-ink">State filter:</label>
           <select
             value={selectedState}
-            onChange={(e) => setSelectedState(e.target.value)}
+            onChange={(e) => setDataPipeline({ selectedState: e.target.value })}
             disabled={!allFilesReady}
             className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent disabled:bg-gray-50"
           >
@@ -972,7 +963,7 @@ function FileUpload({
 }: {
   label: string;
   description: string;
-  slot: FileSlot;
+  slot: PipelineFileSlot;
   onSelect: (f: File) => void;
 }) {
   return (
@@ -1017,7 +1008,7 @@ function StepCard({
   number: number;
   title: string;
   description: string;
-  status: StepStatus;
+  status: PipelineStepStatus;
   canRun: boolean;
   onRun: () => void;
   running?: boolean;
@@ -1085,7 +1076,7 @@ function Badge({
   state,
   number,
 }: {
-  state: StepStatus["state"];
+  state: PipelineStepStatus["state"];
   number: number;
 }) {
   if (state === "done") {
@@ -1116,7 +1107,7 @@ function Badge({
   );
 }
 
-function Pill({ state }: { state: StepStatus["state"] }) {
+function Pill({ state }: { state: PipelineStepStatus["state"] }) {
   if (state === "done") {
     return (
       <span className="text-xs px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 whitespace-nowrap">

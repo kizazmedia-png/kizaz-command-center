@@ -1,11 +1,14 @@
 "use client";
 
 import PageHeader from "@/components/PageHeader";
+import ClearAllButton from "@/components/ClearAllButton";
 import DfdDataPipeline from "@/components/DfdDataPipeline";
 import { useSite } from "@/components/SiteContext";
+import { useResults } from "@/components/ResultsContext";
 
 export default function DataPipelinePage() {
   const { siteId } = useSite();
+  const { clearDataPipelineResults } = useResults();
 
   if (siteId !== "dfd") {
     return (
@@ -27,6 +30,7 @@ export default function DataPipelinePage() {
       <PageHeader
         title="DFD Data Pipeline"
         subtitle="Upload Outscraper, Reviews, and Photos CSVs → run 5 steps → download an import-ready CSV."
+        actions={<ClearAllButton onClick={clearDataPipelineResults} />}
       />
       <DfdDataPipeline />
     </div>

@@ -1,18 +1,32 @@
 "use client";
 
 import PageHeader from "@/components/PageHeader";
+import ClearAllButton from "@/components/ClearAllButton";
 import ToolCard, { ToolGrid } from "@/components/ToolCard";
 import { useSite } from "@/components/SiteContext";
+import { useResults } from "@/components/ResultsContext";
+import { ToolId } from "@/lib/prompts";
+
+const MONETIZATION_TOOL_IDS: ToolId[] = [
+  "affiliate-placement",
+  "lead-magnet",
+  "high-intent-pages",
+  "listing-upsell",
+];
 
 export default function MonetizationPage() {
   const { siteId } = useSite();
   const isDfd = siteId === "dfd";
+  const { clearToolResults } = useResults();
 
   return (
     <div>
       <PageHeader
         title="Monetization"
         subtitle="Affiliate placements, lead magnets, intent ranking, listing upsells."
+        actions={
+          <ClearAllButton onClick={() => clearToolResults(MONETIZATION_TOOL_IDS)} />
+        }
       />
       <ToolGrid>
         <ToolCard

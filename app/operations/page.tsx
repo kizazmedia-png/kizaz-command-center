@@ -1,14 +1,28 @@
 "use client";
 
 import PageHeader from "@/components/PageHeader";
+import ClearAllButton from "@/components/ClearAllButton";
 import ToolCard, { ToolGrid } from "@/components/ToolCard";
+import { useResults } from "@/components/ResultsContext";
+import { ToolId } from "@/lib/prompts";
+
+const OPERATIONS_TOOL_IDS: ToolId[] = [
+  "task-list",
+  "content-audit",
+  "site-health",
+  "weekly-report",
+];
 
 export default function OperationsPage() {
+  const { clearToolResults } = useResults();
   return (
     <div>
       <PageHeader
         title="Operations"
         subtitle="Task lists, content audits, site health, weekly reports."
+        actions={
+          <ClearAllButton onClick={() => clearToolResults(OPERATIONS_TOOL_IDS)} />
+        }
       />
       <ToolGrid>
         <ToolCard

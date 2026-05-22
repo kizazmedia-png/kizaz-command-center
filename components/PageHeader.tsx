@@ -1,13 +1,15 @@
 "use client";
 
+import { ReactNode } from "react";
 import SiteSwitcher from "./SiteSwitcher";
 
 interface PageHeaderProps {
   title: string;
   subtitle?: string;
+  actions?: ReactNode;
 }
 
-export default function PageHeader({ title, subtitle }: PageHeaderProps) {
+export default function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
   return (
     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-8 pb-5 border-b border-gray-200">
       <div>
@@ -16,7 +18,10 @@ export default function PageHeader({ title, subtitle }: PageHeaderProps) {
           <p className="text-sm text-text mt-1">{subtitle}</p>
         )}
       </div>
-      <SiteSwitcher />
+      <div className="flex items-center gap-2 flex-wrap">
+        {actions}
+        <SiteSwitcher />
+      </div>
     </div>
   );
 }

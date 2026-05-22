@@ -1,14 +1,29 @@
 "use client";
 
 import PageHeader from "@/components/PageHeader";
+import ClearAllButton from "@/components/ClearAllButton";
 import ToolCard, { ToolGrid } from "@/components/ToolCard";
+import { useResults } from "@/components/ResultsContext";
+import { ToolId } from "@/lib/prompts";
+
+const SEO_TOOL_IDS: ToolId[] = [
+  "title-meta-rewriter",
+  "internal-link-suggester",
+  "cta-recommender",
+  "cannibalization-checker",
+  "schema-generator",
+];
 
 export default function SeoPage() {
+  const { clearToolResults } = useResults();
   return (
     <div>
       <PageHeader
         title="SEO"
         subtitle="Titles, internal links, CTAs, cannibalization, schema."
+        actions={
+          <ClearAllButton onClick={() => clearToolResults(SEO_TOOL_IDS)} />
+        }
       />
       <ToolGrid>
         <ToolCard

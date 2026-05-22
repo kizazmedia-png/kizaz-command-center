@@ -2,6 +2,7 @@
 
 import { useState, ReactNode } from "react";
 import { useSite } from "./SiteContext";
+import { useToolResults } from "./ResultsContext";
 import MarkdownView from "./MarkdownView";
 import { ToolId } from "@/lib/prompts";
 
@@ -69,23 +70,15 @@ export default function ToolCard({
   publishToWordPress,
 }: ToolCardProps) {
   const { siteId } = useSite();
-  const [values, setValues] = useState<Record<string, any>>({});
-  const [output, setOutput] = useState<string>("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>("");
+  const { state, update } = useToolResults(tool);
+  const { values, output, loading, error, loadingLoader, publishing, publishMsg } =
+    state;
   const [copied, setCopied] = useState(false);
-  const [loadingLoader, setLoadingLoader] = useState<string>("");
-  const [publishing, setPublishing] = useState(false);
-  const [publishMsg, setPublishMsg] = useState<{
-    kind: "ok" | "err";
-    text: string;
-    url?: string;
-  } | null>(null);
 
   if (hidden) return null;
 
-  const update = (name: string, value: any) =>
-    setValues((v) => ({ ...v, [name]: value }));
+  const updateValue = (name: string, value: any) =>
+    update((prev) => ({ values: { ...prev.values, [name]: value } }));
 
   const submit = async () => {
     // Validate required
@@ -98,14 +91,12 @@ export default function ToolCard({
           (typeof v === "string" && !v.trim()) ||
           (Array.isArray(v) && v.length === 0)
         ) {
-          setError(`Please fill in: ${f.label}`);
+          update({ error: `Please fill in: ${f.label}` });
           return;
         }
       }
     }
-    setError("");
-    setLoading(true);
-    setOutput("");
+    update({ error: "", loading: true, output: "" });
     try {
       const res = await fetch("/api/ai", {
         method: "POST",
@@ -114,27 +105,24 @@ export default function ToolCard({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data?.error || `Request failed (${res.status})`);
+        update({ error: data?.error || `Request failed (${res.status})` });
       } else {
-        setOutput(data.output || "");
+        update({ output: data.output || "" });
       }
     } catch (e: any) {
-      setError(e?.message || "Network error");
+      update({ error: e?.message || "Network error" });
     } finally {
-      setLoading(false);
+      update({ loading: false });
     }
   };
 
   const clear = () => {
-    setOutput("");
-    setError("");
+    update({ output: "", error: "", publishMsg: null });
     setCopied(false);
-    setPublishMsg(null);
   };
 
   const runLoader = async (loader: WordPressLoader) => {
-    setLoadingLoader(loader.field);
-    setError("");
+    update({ loadingLoader: loader.field, error: "" });
     try {
       const res = await fetch("/api/wordpress/posts", {
         method: "POST",
@@ -143,63 +131,72 @@ export default function ToolCard({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data?.error || `WordPress request failed (${res.status})`);
+        update({ error: data?.error || `WordPress request failed (${res.status})` });
         return;
       }
       const posts: WordPressPost[] = Array.isArray(data?.posts)
         ? data.posts
         : [];
       const text = posts.map(loader.format).filter(Boolean).join("\n");
-      const existing = (values[loader.field] || "").trim();
-      const next = existing ? `${existing}\n${text}` : text;
-      update(loader.field, next);
+      update((prev) => {
+        const existing = (prev.values[loader.field] || "").trim();
+        const next = existing ? `${existing}\n${text}` : text;
+        return {
+          values: { ...prev.values, [loader.field]: next },
+        };
+      });
     } catch (e: any) {
-      setError(e?.message || "Network error loading WordPress posts");
+      update({ error: e?.message || "Network error loading WordPress posts" });
     } finally {
-      setLoadingLoader("");
+      update({ loadingLoader: "" });
     }
   };
 
   const sendToWordPress = async () => {
     if (!publishToWordPress || !output) return;
     const titleSrc = values[publishToWordPress.titleField];
-    const title =
+    const postTitle =
       typeof titleSrc === "string" && titleSrc.trim()
         ? titleSrc.trim()
         : "Untitled draft";
-    setPublishing(true);
-    setPublishMsg(null);
+    update({ publishing: true, publishMsg: null });
     try {
       const res = await fetch("/api/wordpress/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           site: siteId,
-          title,
+          title: postTitle,
           content: output,
           status: "draft",
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setPublishMsg({
-          kind: "err",
-          text: data?.error || `WordPress request failed (${res.status})`,
+        update({
+          publishMsg: {
+            kind: "err",
+            text: data?.error || `WordPress request failed (${res.status})`,
+          },
         });
       } else {
-        setPublishMsg({
-          kind: "ok",
-          text: "Draft created in WordPress.",
-          url: data?.editUrl || data?.url || "",
+        update({
+          publishMsg: {
+            kind: "ok",
+            text: "Draft created in WordPress.",
+            url: data?.editUrl || data?.url || "",
+          },
         });
       }
     } catch (e: any) {
-      setPublishMsg({
-        kind: "err",
-        text: e?.message || "Network error sending to WordPress",
+      update({
+        publishMsg: {
+          kind: "err",
+          text: e?.message || "Network error sending to WordPress",
+        },
       });
     } finally {
-      setPublishing(false);
+      update({ publishing: false });
     }
   };
 
@@ -249,7 +246,7 @@ export default function ToolCard({
             key={f.name}
             field={f}
             value={values[f.name]}
-            onChange={(v) => update(f.name, v)}
+            onChange={(v) => updateValue(f.name, v)}
           />
         ))}
       </div>
